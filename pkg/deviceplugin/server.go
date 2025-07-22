@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -281,6 +282,8 @@ func (s *DevicePluginService) prepareContainerDevices(deviceIDs []string) (*Cont
 		Annotations: make(map[string]string),
 	}
 
+	var pciAddresses []string
+
 	for _, deviceID := range deviceIDs {
 		s.deviceManager.mutex.RLock()
 		device, exists := s.deviceManager.devices[deviceID]
@@ -294,13 +297,35 @@ func (s *DevicePluginService) prepareContainerDevices(deviceIDs []string) (*Cont
 		spec.DeviceNodes = append(spec.DeviceNodes, vfioDevicePath)
 		spec.DeviceNodes = append(spec.DeviceNodes, "/dev/vfio/vfio")
 
+		pciAddresses = append(pciAddresses, device.PCIAddress)
+
 		spec.Envs[fmt.Sprintf("GPU_%s_VFIO_GROUP", deviceID)] = device.VFIOGroup
 		spec.Envs[fmt.Sprintf("GPU_%s_PCI_ADDRESS", deviceID)] = device.PCIAddress
 
 		spec.Annotations[fmt.Sprintf("gpu.nvidia.com/%s.vfio-group", deviceID)] = device.VFIOGroup
 	}
 
+	kubevirtResourceKey := s.buildKubeVirtResourceKey()
+	if kubevirtResourceKey != "" && len(pciAddresses) > 0 {
+		spec.Envs[kubevirtResourceKey] = strings.Join(pciAddresses, ",")
+	}
+
 	return spec, nil
+}
+
+func (s *DevicePluginService) buildKubeVirtResourceKey() string {
+	resourceName := s.resourceName
+
+	if resourceName == "" {
+		return ""
+	}
+
+	resourceName = strings.ToUpper(resourceName)
+	resourceName = strings.ReplaceAll(resourceName, ".", "_")
+	resourceName = strings.ReplaceAll(resourceName, "/", "_")
+	resourceName = strings.ReplaceAll(resourceName, "-", "_")
+
+	return fmt.Sprintf("%s_%s", gpuPrefix, resourceName)
 }
 
 func (dp *DevicePlugin) registerWithKubelet() error {

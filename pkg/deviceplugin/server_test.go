@@ -137,6 +137,7 @@ func TestDevicePluginService_prepareContainerDevices(t *testing.T) {
 
 	service := &DevicePluginService{
 		deviceManager: deviceManager,
+		resourceName:  "nvidia.com/gpu-h200",
 		logger:        logger,
 	}
 
@@ -172,8 +173,9 @@ func TestDevicePluginService_prepareContainerDevices(t *testing.T) {
 	}
 
 	expectedEnvs := map[string]string{
-		"GPU_test-device_VFIO_GROUP":  "1",
-		"GPU_test-device_PCI_ADDRESS": "0000:00:01.0",
+		"GPU_test-device_VFIO_GROUP":                      "1",
+		"GPU_test-device_PCI_ADDRESS":                     "0000:00:01.0",
+		"PCI_RESOURCE_NVIDIA_COM_NVIDIA_COM_GPU_H200":     "0000:00:01.0",
 	}
 
 	for key, expectedValue := range expectedEnvs {
@@ -185,6 +187,24 @@ func TestDevicePluginService_prepareContainerDevices(t *testing.T) {
 	_, err = service.prepareContainerDevices([]string{"nonexistent-device"})
 	if err == nil {
 		t.Errorf("Expected error for nonexistent device")
+	}
+
+	deviceManager.devices["test-device-2"] = &GPUDevice{
+		ID:         "test-device-2",
+		PCIAddress: "0000:00:02.0",
+		VFIOGroup:  "2",
+		Health:     HealthHealthy,
+	}
+
+	specMultiple, err := service.prepareContainerDevices([]string{"test-device", "test-device-2"})
+	if err != nil {
+		t.Errorf("prepareContainerDevices() with multiple devices error = %v", err)
+		return
+	}
+
+	expectedKubevirtEnv := "0000:00:01.0,0000:00:02.0"
+	if actualValue, exists := specMultiple.Envs["PCI_RESOURCE_NVIDIA_COM_NVIDIA_COM_GPU_H200"]; !exists || actualValue != expectedKubevirtEnv {
+		t.Errorf("Expected KubeVirt env to be %s, got %s", expectedKubevirtEnv, actualValue)
 	}
 }
 
@@ -243,5 +263,50 @@ func TestDeviceManager_GetDevice(t *testing.T) {
 	_, exists = dm.GetDevice("nonexistent")
 	if exists {
 		t.Errorf("Expected device to not exist")
+	}
+}
+
+func TestDevicePluginService_buildKubeVirtResourceKey(t *testing.T) {
+	logger, _ := test.NewNullLogger()
+
+	tests := []struct {
+		name         string
+		resourceName string
+		expected     string
+	}{
+		{
+			name:         "default resource name",
+			resourceName: "nvidia.com/gpu-h200",
+			expected:     "PCI_RESOURCE_NVIDIA_COM_NVIDIA_COM_GPU_H200",
+		},
+		{
+			name:         "partitioned resource name",
+			resourceName: "nvidia.com/gpu-h200-4x",
+			expected:     "PCI_RESOURCE_NVIDIA_COM_NVIDIA_COM_GPU_H200_4X",
+		},
+		{
+			name:         "empty resource name",
+			resourceName: "",
+			expected:     "",
+		},
+		{
+			name:         "simple resource name",
+			resourceName: "example/resource",
+			expected:     "PCI_RESOURCE_NVIDIA_COM_EXAMPLE_RESOURCE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &DevicePluginService{
+				resourceName: tt.resourceName,
+				logger:       logger,
+			}
+
+			result := service.buildKubeVirtResourceKey()
+			if result != tt.expected {
+				t.Errorf("buildKubeVirtResourceKey() = %v, expected %v", result, tt.expected)
+			}
+		})
 	}
 }

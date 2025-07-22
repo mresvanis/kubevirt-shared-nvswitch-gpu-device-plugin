@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	socketPath = flag.String("socket-path", "/var/lib/kubelet/device-plugins/", "Device plugin socket directory")
+	socketPath = flag.String("socket-path", deviceplugin.DevicePluginPath, "Device plugin socket directory")
 
-	resourceName = flag.String("resource-name", "nvidia.com/gpu-h200", "Resource name prefix")
+	resourceName = flag.String("resource-name", deviceplugin.DefaultResourceName, "Resource name prefix")
 
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 

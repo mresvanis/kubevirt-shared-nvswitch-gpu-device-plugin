@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: shared-nvswitch-device-plugin
-  namespace: kube-system
+  namespace: nvidia-gpu-operator
   labels:
     app: shared-nvswitch-device-plugin
 ---
@@ -39,4 +39,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: shared-nvswitch-device-plugin
-  namespace: kube-system
+  namespace: nvidia-gpu-operator

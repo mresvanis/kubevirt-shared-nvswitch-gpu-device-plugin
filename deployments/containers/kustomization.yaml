@@ -3,7 +3,7 @@ kind: Kustomization
 
 metadata:
   name: shared-nvswitch-device-plugin
-  namespace: kube-system
+  namespace: nvidia-gpu-operator
 
 resources:
 - rbac.yaml

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: shared-nvswitch-device-plugin
-  namespace: kube-system
+  namespace: nvidia-gpu-operator
   labels:
     app: shared-nvswitch-device-plugin
 spec:

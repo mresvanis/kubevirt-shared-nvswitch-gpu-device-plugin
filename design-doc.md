@@ -426,7 +426,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: shared-nvswitch-device-plugin
-  namespace: kube-system
+  namespace: nvidia-gpu-operator
 spec:
   selector:
     matchLabels:

@@ -108,8 +108,8 @@ kubectl apply -k https://github.com/mresvanis/shared-nvswitch-gpu-device-plugin/
 kubectl apply -k https://github.com/mresvanis/shared-nvswitch-gpu-device-plugin//deployments/containers?ref=v1.0.0
 
 # Verify deployment
-kubectl get daemonset -n kube-system shared-nvswitch-device-plugin
-kubectl get pods -n kube-system -l name=shared-nvswitch-device-plugin
+kubectl get daemonset -n nvidia-gpu-operator shared-nvswitch-device-plugin
+kubectl get pods -n nvidia-gpu-operator -l name=shared-nvswitch-device-plugin
 ```
 
 ### Option 2: Deploy Individual Manifests
@@ -159,7 +159,7 @@ To customize the configuration:
 
 ```bash
 # Edit the ConfigMap
-kubectl edit configmap shared-nvswitch-device-plugin-config -n kube-system
+kubectl edit configmap shared-nvswitch-device-plugin-config -n nvidia-gpu-operator
 
 # Or update the file and reapply
 kubectl apply -f deployments/containers/configmap.yaml
@@ -247,7 +247,7 @@ The device plugin exposes metrics on port 9090:
 
 ```bash
 # Port-forward to access metrics locally
-kubectl port-forward -n kube-system svc/shared-nvswitch-device-plugin-metrics 9090:9090
+kubectl port-forward -n nvidia-gpu-operator svc/shared-nvswitch-device-plugin-metrics 9090:9090
 
 # View metrics
 curl http://localhost:9090/metrics
@@ -282,21 +282,21 @@ curl http://localhost:9090/healthz
 
 Enable debug logging:
 ```bash
-kubectl set env daemonset/shared-nvswitch-device-plugin -n kube-system HGX_H200_LOG_LEVEL=debug
+kubectl set env daemonset/shared-nvswitch-device-plugin -n nvidia-gpu-operator HGX_H200_LOG_LEVEL=debug
 ```
 
 View device plugin logs:
 ```bash
-kubectl logs -n kube-system -l name=shared-nvswitch-device-plugin -f
+kubectl logs -n nvidia-gpu-operator -l name=shared-nvswitch-device-plugin -f
 ```
 
 Check deployment status:
 ```bash
 # Check DaemonSet status
-kubectl get daemonset -n kube-system shared-nvswitch-device-plugin
+kubectl get daemonset -n nvidia-gpu-operator shared-nvswitch-device-plugin
 
 # Check pod status on each node
-kubectl get pods -n kube-system -l name=shared-nvswitch-device-plugin -o wide
+kubectl get pods -n nvidia-gpu-operator -l name=shared-nvswitch-device-plugin -o wide
 
 # Check node resources
 kubectl describe node <node-name>

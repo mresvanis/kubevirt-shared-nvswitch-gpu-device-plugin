@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: shared-nvswitch-device-plugin
-  namespace: kube-system
+  namespace: nvidia-gpu-operator
   labels:
     app: shared-nvswitch-device-plugin
     component: metrics
@@ -19,4 +19,4 @@ spec:
     scheme: http
   namespaceSelector:
     matchNames:
-    - kube-system
+    - nvidia-gpu-operator

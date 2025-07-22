@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-nvswitch-device-plugin-config
+  namespace: kube-system
+  labels:
+    app: shared-nvswitch-device-plugin
+data:
+  config.yaml: |
+    device_plugin:
+      socket_path: "/var/lib/kubelet/device-plugins/"
+      resource_prefix: "nvidia.com"
+      health_check_interval: "30s"
+      
+    fmpm:
+      endpoint: "127.0.0.1:8080"
+      connection_type: "tcp"  # tcp or unix_socket
+      unix_socket_path: "/var/run/nvidia-fabricmanager/fmpm.sock"
+      timeout: "30s"
+      retry_policy:
+        max_retries: 3
+        backoff: "exponential"
+        
+    vfio:
+      device_path: "/sys/bus/pci/devices"
+      group_path: "/dev/vfio"
+      
+    partitions:
+      supported_sizes: [1, 2, 4, 8, 16]
+      allocation_strategy: "topology_aware"
+      auto_deactivate_timeout: "300s"
+      
+    logging:
+      level: "info"
+      format: "json"
+      
+    monitoring:
+      enabled: true
+      port: 9090
+      metrics_path: "/metrics"

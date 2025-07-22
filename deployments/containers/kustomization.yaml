@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: shared-nvswitch-device-plugin
+  namespace: kube-system
+
+resources:
+- rbac.yaml
+- configmap.yaml
+- service.yaml
+- daemonset.yaml
+- servicemonitor.yaml
+
+commonLabels:
+  app: shared-nvswitch-device-plugin
+  version: v1.0.0
+
+images:
+- name: nvidia/shared-nvswitch-device-plugin
+  newTag: latest

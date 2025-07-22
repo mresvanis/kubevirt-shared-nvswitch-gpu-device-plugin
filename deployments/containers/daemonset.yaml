@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: shared-nvswitch-device-plugin
+  namespace: kube-system
+  labels:
+    app: shared-nvswitch-device-plugin
+spec:
+  selector:
+    matchLabels:
+      name: shared-nvswitch-device-plugin
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: shared-nvswitch-device-plugin
+        app: shared-nvswitch-device-plugin
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      hostNetwork: true
+      hostPID: true
+      priorityClassName: system-node-critical
+      serviceAccountName: shared-nvswitch-device-plugin
+      nodeSelector:
+        nvidia.com/hgx-h200: "true"
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 300
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 300
+      containers:
+      - name: shared-nvswitch-device-plugin
+        image: nvidia/shared-nvswitch-device-plugin:latest
+        imagePullPolicy: Always
+        command:
+        - /usr/bin/shared-nvswitch-device-plugin
+        args:
+        - --config=/etc/shared-nvswitch-device-plugin/config.yaml
+        - --v=2
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: HGX_H200_CONFIG_PATH
+          value: "/etc/shared-nvswitch-device-plugin/config.yaml"
+        - name: HGX_H200_LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+          limits:
+            cpu: 500m
+            memory: 200Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: device-plugin
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        - name: config
+          mountPath: /etc/shared-nvswitch-device-plugin
+          readOnly: true
+        - name: nvidia-fabricmanager
+          mountPath: /var/run/nvidia-fabricmanager
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+      volumes:
+      - name: device-plugin
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+          type: DirectoryOrCreate
+      - name: dev
+        hostPath:
+          path: /dev
+          type: Directory
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: proc
+        hostPath:
+          path: /proc
+          type: Directory
+      - name: config
+        configMap:
+          name: shared-nvswitch-device-plugin-config
+      - name: nvidia-fabricmanager
+        hostPath:
+          path: /var/run/nvidia-fabricmanager
+          type: DirectoryOrCreate
+      terminationGracePeriodSeconds: 30

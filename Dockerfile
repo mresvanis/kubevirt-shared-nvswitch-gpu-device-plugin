@@ -9,17 +9,17 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o device-plugin ./cmd/device-plugin/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags='-s -w -extldflags "-static"' -o device-plugin ./cmd/device-plugin/
 
-FROM alpine:3.18
+FROM alpine:3.20
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates \
+    && adduser -D -s /bin/sh -h /app device-plugin
 
-WORKDIR /root/
+WORKDIR /app
 
-COPY --from=builder /app/device-plugin .
-
-RUN adduser -D -s /bin/sh device-plugin
+COPY --from=builder /app/device-plugin ./device-plugin
+RUN chmod +x ./device-plugin
 
 USER device-plugin
 

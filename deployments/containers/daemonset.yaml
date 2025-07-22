@@ -45,27 +45,19 @@ spec:
         tolerationSeconds: 300
       containers:
       - name: shared-nvswitch-device-plugin
-        image: nvidia/shared-nvswitch-device-plugin:latest
+        image: quay.io/mresvani/shared-nvswitch-device-plugin:latest
         imagePullPolicy: Always
         command:
-        - /usr/bin/shared-nvswitch-device-plugin
+        - ./device-plugin
         args:
-        - --config=/etc/shared-nvswitch-device-plugin/config.yaml
-        - --v=2
+        - --config-path=/etc/shared-nvswitch-device-plugin/config.yaml
+        - --log-level=info
         securityContext:
           privileged: true
+          runAsUser: 0
           capabilities:
             add:
             - SYS_ADMIN
-        env:
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
-        - name: HGX_H200_CONFIG_PATH
-          value: "/etc/shared-nvswitch-device-plugin/config.yaml"
-        - name: HGX_H200_LOG_LEVEL
-          value: "info"
         resources:
           requests:
             cpu: 100m

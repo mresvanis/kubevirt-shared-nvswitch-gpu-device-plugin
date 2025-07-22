@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-device-plugin
+/device-plugin
 
 # Test binary, built with `go test -c`
 *.test

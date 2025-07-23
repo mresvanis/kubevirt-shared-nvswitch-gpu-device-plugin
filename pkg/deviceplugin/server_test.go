@@ -173,9 +173,9 @@ func TestDevicePluginService_prepareContainerDevices(t *testing.T) {
 	}
 
 	expectedEnvs := map[string]string{
-		"GPU_test-device_VFIO_GROUP":                      "1",
-		"GPU_test-device_PCI_ADDRESS":                     "0000:00:01.0",
-		"PCI_RESOURCE_NVIDIA_COM_NVIDIA_COM_GPU_H200":     "0000:00:01.0",
+		"GPU_test-device_VFIO_GROUP":                  "1",
+		"GPU_test-device_PCI_ADDRESS":                 "0000:00:01.0",
+		"PCI_RESOURCE_NVIDIA_COM_NVIDIA_COM_GPU_H200": "0000:00:01.0",
 	}
 
 	for key, expectedValue := range expectedEnvs {

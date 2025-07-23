@@ -3,6 +3,7 @@ module github.com/mresvanis/shared-nvswitch-gpu-device-plugin
 go 1.24
 
 require (
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/grpc v1.59.0
 	k8s.io/kubelet v0.28.4

@@ -6,10 +6,12 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -37,10 +39,12 @@ type DevicePluginService struct {
 	socketPath    string
 	resourceName  string
 	deviceManager *DeviceManager
-	healthChecker *HealthChecker
 	logger        *logrus.Logger
 	ctx           context.Context
 	cancel        context.CancelFunc
+	stop          chan struct{}
+	healthy       chan string
+	unhealthy     chan string
 }
 
 type DevicePlugin struct {
@@ -64,22 +68,18 @@ func New(config *Config) (*DevicePlugin, error) {
 		logger:     config.Logger,
 	}
 
-	healthChecker := &HealthChecker{
-		deviceManager: deviceManager,
-		checkInterval: DefaultHealthCheckInterval,
-		logger:        config.Logger,
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	service := &DevicePluginService{
 		socketPath:    path.Join(config.SocketPath, DefaultSocketName),
 		resourceName:  config.ResourceName,
 		deviceManager: deviceManager,
-		healthChecker: healthChecker,
 		logger:        config.Logger,
 		ctx:           ctx,
 		cancel:        cancel,
+		stop:          make(chan struct{}),
+		healthy:       make(chan string),
+		unhealthy:     make(chan string),
 	}
 
 	return &DevicePlugin{
@@ -127,9 +127,7 @@ func (s *DevicePluginService) Start() error {
 		return fmt.Errorf("failed to start device manager: %v", err)
 	}
 
-	if err := s.healthChecker.Start(s.ctx); err != nil {
-		return fmt.Errorf("failed to start health checker: %v", err)
-	}
+	go s.healthCheck()
 
 	go func() {
 		if err := s.server.Serve(l); err != nil {
@@ -143,6 +141,7 @@ func (s *DevicePluginService) Start() error {
 
 func (s *DevicePluginService) Stop() {
 	s.cancel()
+	close(s.stop)
 
 	if s.server != nil {
 		s.logger.Info("Stopping gRPC server")
@@ -356,4 +355,91 @@ func (dp *DevicePlugin) registerWithKubelet() error {
 	}).Info("Successfully registered with kubelet")
 
 	return nil
+}
+
+func (s *DevicePluginService) healthCheck() error {
+	method := "healthCheck"
+	s.logger.WithField("method", method).Info("Starting health check")
+
+	var pathDeviceMap = make(map[string]string)
+	var devicePath = PCIDevicesPath
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		s.logger.WithField("method", method).WithError(err).Error("Unable to create fsnotify watcher")
+		return err
+	}
+	defer watcher.Close()
+
+	err = watcher.Add(filepath.Dir(s.socketPath))
+	if err != nil {
+		s.logger.WithField("method", method).WithError(err).Error("Unable to add device plugin socket path to fsnotify watcher")
+		return err
+	}
+
+	_, err = os.Stat(devicePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.WithField("method", method).WithError(err).Error("Unable to stat device path")
+			return err
+		}
+	}
+
+	s.deviceManager.mutex.RLock()
+	for _, dev := range s.deviceManager.devices {
+		deviceSysPath := filepath.Join(devicePath, dev.PCIAddress)
+		err = watcher.Add(deviceSysPath)
+		s.logger.WithFields(logrus.Fields{
+			"method": method,
+			"path":   deviceSysPath,
+		}).Debug("Adding watcher to device path")
+		pathDeviceMap[deviceSysPath] = dev.ID
+		if err != nil {
+			s.logger.WithField("method", method).WithError(err).WithField("device_path", deviceSysPath).Error("Unable to add device path to fsnotify watcher")
+			return err
+		}
+	}
+	s.deviceManager.mutex.RUnlock()
+
+	for {
+		select {
+		case <-s.stop:
+			s.logger.WithField("method", method).Info("Health check stopped")
+			return nil
+		case event := <-watcher.Events:
+			deviceID, ok := pathDeviceMap[event.Name]
+			if ok {
+				if event.Op == fsnotify.Create {
+					s.logger.WithFields(logrus.Fields{
+						"method":    method,
+						"device_id": deviceID,
+						"event":     event.Op.String(),
+						"path":      event.Name,
+					}).Info("Device became healthy")
+					s.deviceManager.UpdateDeviceHealth(deviceID, HealthHealthy)
+					select {
+					case s.healthy <- deviceID:
+					default:
+					}
+				} else if (event.Op == fsnotify.Remove) || (event.Op == fsnotify.Rename) {
+					s.logger.WithFields(logrus.Fields{
+						"method":    method,
+						"device_id": deviceID,
+						"event":     event.Op.String(),
+						"path":      event.Name,
+					}).Warn("Marking device unhealthy")
+					s.deviceManager.UpdateDeviceHealth(deviceID, HealthUnhealthy)
+					select {
+					case s.unhealthy <- deviceID:
+					default:
+					}
+				}
+			} else if event.Name == s.socketPath && event.Op == fsnotify.Remove {
+				s.logger.WithField("method", method).Info("Socket path for GPU device was removed, kubelet likely restarted")
+				return fmt.Errorf("socket removed, restart required")
+			}
+		case err := <-watcher.Errors:
+			s.logger.WithField("method", method).WithError(err).Error("Watcher error")
+		}
+	}
 }

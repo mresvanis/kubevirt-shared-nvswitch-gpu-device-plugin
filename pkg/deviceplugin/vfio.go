@@ -14,7 +14,7 @@ const (
 	PCIDevicesPath    = "/sys/bus/pci/devices"
 	VFIOGroupPath     = "/dev/vfio"
 	H200VendorID      = "10de"
-	H200DeviceID      = "2330"
+	H200DeviceID      = "2335"
 	VFIOPCIDriverName = "vfio-pci"
 )
 
@@ -34,6 +34,12 @@ func NewVFIOManager(logger *logrus.Logger) *VFIOManager {
 
 func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 	v.logger.Info("Starting GPU discovery")
+	v.logger.WithFields(logrus.Fields{
+		"device_path":     v.devicePath,
+		"expected_vendor": H200VendorID,
+		"expected_device": H200DeviceID,
+		"expected_driver": VFIOPCIDriverName,
+	}).Info("Discovery parameters")
 
 	var devices []GPUDevice
 
@@ -42,10 +48,18 @@ func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 		return nil, fmt.Errorf("failed to read PCI devices directory: %v", err)
 	}
 
+	v.logger.WithField("total_pci_devices", len(entries)).Info("Found PCI devices to scan")
+
+	processedCount := 0
+	nvidiaDeviceCount := 0
+
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		// PCI devices can be directories or symlinks
+		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
 			continue
 		}
+
+		processedCount++
 
 		pciAddress := entry.Name()
 		devicePath := filepath.Join(v.devicePath, pciAddress)
@@ -55,11 +69,19 @@ func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 			v.logger.WithFields(logrus.Fields{
 				"pci_address": pciAddress,
 				"error":       err,
-			}).Debug("Failed to read vendor ID")
+			}).Info("Failed to read vendor ID")
 			continue
 		}
 
 		vendorID = strings.TrimSpace(strings.TrimPrefix(vendorID, "0x"))
+
+		if vendorID == H200VendorID {
+			nvidiaDeviceCount++
+			v.logger.WithFields(logrus.Fields{
+				"pci_address": pciAddress,
+				"vendor_id":   vendorID,
+			}).Info("Found NVIDIA device, checking device ID")
+		}
 
 		if vendorID != H200VendorID {
 			continue
@@ -80,9 +102,16 @@ func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 			v.logger.WithFields(logrus.Fields{
 				"pci_address": pciAddress,
 				"device_id":   deviceID,
-			}).Debug("Device is not H200 GPU, skipping")
+				"expected":    H200DeviceID,
+			}).Info("Device ID mismatch, skipping device")
 			continue
 		}
+
+		v.logger.WithFields(logrus.Fields{
+			"pci_address": pciAddress,
+			"vendor_id":   vendorID,
+			"device_id":   deviceID,
+		}).Info("Found matching H200 GPU, checking driver binding")
 
 		driver, err := v.readSysfsFile(devicePath, "driver")
 		if err != nil {
@@ -95,11 +124,17 @@ func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 
 		if !strings.Contains(driver, VFIOPCIDriverName) {
 			v.logger.WithFields(logrus.Fields{
-				"pci_address": pciAddress,
-				"driver":      driver,
-			}).Debug("Device not bound to vfio-pci driver, skipping")
+				"pci_address":     pciAddress,
+				"driver":          driver,
+				"expected_driver": VFIOPCIDriverName,
+			}).Warn("Device not bound to vfio-pci driver, skipping")
 			continue
 		}
+
+		v.logger.WithFields(logrus.Fields{
+			"pci_address": pciAddress,
+			"driver":      driver,
+		}).Info("Device is bound to vfio-pci, checking VFIO group")
 
 		vfioGroup, err := v.getVFIOGroup(pciAddress)
 		if err != nil {
@@ -110,14 +145,7 @@ func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 			continue
 		}
 
-		health, err := v.getDeviceHealth(pciAddress)
-		if err != nil {
-			v.logger.WithFields(logrus.Fields{
-				"pci_address": pciAddress,
-				"error":       err,
-			}).Warn("Failed to get device health")
-			health = HealthUnknown
-		}
+		health := HealthHealthy
 
 		device := GPUDevice{
 			ID:         pciAddress,
@@ -138,47 +166,12 @@ func (v *VFIOManager) DiscoverGPUs() ([]GPUDevice, error) {
 		}).Info("Discovered H200 GPU")
 	}
 
-	v.logger.WithField("device_count", len(devices)).Info("GPU discovery completed")
+	v.logger.WithFields(logrus.Fields{
+		"processed_devices": processedCount,
+		"nvidia_devices":    nvidiaDeviceCount,
+		"h200_devices":      len(devices),
+	}).Info("GPU discovery completed")
 	return devices, nil
-}
-
-func (v *VFIOManager) GetDeviceHealth(deviceID string) (DeviceHealth, error) {
-	return v.getDeviceHealth(deviceID)
-}
-
-func (v *VFIOManager) getDeviceHealth(pciAddress string) (DeviceHealth, error) {
-	devicePath := filepath.Join(v.devicePath, pciAddress)
-
-	enablePath := filepath.Join(devicePath, "enable")
-	if _, err := os.Stat(enablePath); err != nil {
-		return HealthUnknown, fmt.Errorf("device enable file not found: %v", err)
-	}
-
-	enableContent, err := v.readSysfsFile(devicePath, "enable")
-	if err != nil {
-		return HealthUnknown, fmt.Errorf("failed to read device enable status: %v", err)
-	}
-
-	if strings.TrimSpace(enableContent) != "1" {
-		return HealthUnhealthy, nil
-	}
-
-	configPath := filepath.Join(devicePath, "config")
-	if _, err := os.Stat(configPath); err != nil {
-		return HealthUnhealthy, fmt.Errorf("device config not accessible: %v", err)
-	}
-
-	vfioGroup, err := v.getVFIOGroup(pciAddress)
-	if err != nil {
-		return HealthUnhealthy, fmt.Errorf("VFIO group not accessible: %v", err)
-	}
-
-	vfioGroupPath := filepath.Join(v.groupPath, vfioGroup)
-	if _, err := os.Stat(vfioGroupPath); err != nil {
-		return HealthUnhealthy, fmt.Errorf("VFIO group device not found: %v", err)
-	}
-
-	return HealthHealthy, nil
 }
 
 func (v *VFIOManager) getVFIOGroup(pciAddress string) (string, error) {

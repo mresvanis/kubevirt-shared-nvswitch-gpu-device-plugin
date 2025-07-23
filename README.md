@@ -102,10 +102,10 @@ The device plugin exposes multiple resource types for different partition sizes:
 
 ```bash
 # Deploy directly from GitHub repository
-kubectl apply -k https://github.com/mresvanis/shared-nvswitch-gpu-device-plugin//deployments/containers
+kubectl apply -k https://github.com/mresvanis/shared-nvswitch-gpu-device-plugin/deployment
 
 # Or deploy a specific version/branch
-kubectl apply -k https://github.com/mresvanis/shared-nvswitch-gpu-device-plugin//deployments/containers?ref=v1.0.0
+kubectl apply -k https://github.com/mresvanis/shared-nvswitch-gpu-device-plugin//deployment?ref=v1.0.0
 
 # Verify deployment
 kubectl get daemonset -n nvidia-gpu-operator shared-nvswitch-device-plugin
@@ -116,13 +116,13 @@ kubectl get pods -n nvidia-gpu-operator -l name=shared-nvswitch-device-plugin
 
 ```bash
 # Deploy directly from GitHub repository
-kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployments/containers/rbac.yaml
-kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployments/containers/configmap.yaml
-kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployments/containers/service.yaml
-kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployments/containers/daemonset.yaml
+kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployment/rbac.yaml
+kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployment/configmap.yaml
+kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployment/service.yaml
+kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployment/daemonset.yaml
 
 # Optional: Deploy ServiceMonitor for Prometheus
-kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployments/containers/servicemonitor.yaml
+kubectl apply -f https://raw.githubusercontent.com/mresvanis/shared-nvswitch-gpu-device-plugin/main/deployment/servicemonitor.yaml
 ```
 
 ### Option 3: Build from Source
@@ -139,14 +139,14 @@ make build
 make image-build
 
 # Deploy to Kubernetes
-kubectl apply -k deployments/containers/
+kubectl apply -k deployment/
 ```
 
 ## Configuration
 
 ### Configuration Files
 
-The deployment includes a comprehensive ConfigMap with all necessary configuration. The main configuration file is located at `deployments/containers/configmap.yaml` and includes:
+The deployment includes a comprehensive ConfigMap with all necessary configuration. The main configuration file is located at `deployment/configmap.yaml` and includes:
 
 - **Device Plugin Settings**: Socket path, resource prefix, health check intervals
 - **FMPM Integration**: Connection endpoints, retry policies, timeouts
@@ -162,7 +162,7 @@ To customize the configuration:
 kubectl edit configmap shared-nvswitch-device-plugin-config -n nvidia-gpu-operator
 
 # Or update the file and reapply
-kubectl apply -f deployments/containers/configmap.yaml
+kubectl apply -f deployment/configmap.yaml
 ```
 
 ### Environment Variables

@@ -27,25 +27,9 @@ spec:
       hostPID: true
       priorityClassName: system-node-critical
       serviceAccountName: shared-nvswitch-device-plugin
-      nodeSelector:
-        nvidia.com/hgx-h200: "true"
-      tolerations:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
-      - key: CriticalAddonsOnly
-        operator: Exists
-      - key: node.kubernetes.io/not-ready
-        operator: Exists
-        effect: NoExecute
-        tolerationSeconds: 300
-      - key: node.kubernetes.io/unreachable
-        operator: Exists
-        effect: NoExecute
-        tolerationSeconds: 300
       containers:
       - name: shared-nvswitch-device-plugin
-        image: quay.io/mresvani/shared-nvswitch-device-plugin:latest
+        image: quay.io/mresvani/shared-nvswitch-gpu-device-plugin:latest
         imagePullPolicy: Always
         command:
         - ./device-plugin
@@ -54,10 +38,8 @@ spec:
         - --log-level=info
         securityContext:
           privileged: true
-          runAsUser: 0
-          capabilities:
-            add:
-            - SYS_ADMIN
+          seLinuxOptions:
+            level: s0
         resources:
           requests:
             cpu: 100m
